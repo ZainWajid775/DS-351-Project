@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PULSE — Engine Health Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+:root {
+  --bg: #060a0f;
+  --surface: #0d1520;
+  --surface2: #111d2e;
+  --healthy: #00e5a0;
+  --faulty: #ff3d5a;
+  --accent: #f5a623;
+  --text: #e8edf5;
+  --muted: #5a6a80;
+  --border: rgba(255,255,255,0.06);
+  --glow-green: 0 0 30px rgba(0,229,160,0.25);
+  --glow-red: 0 0 30px rgba(255,61,90,0.25);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  overflow-x: hidden;
+  line-height: 1.6;
+}
+
+/* ── NAV ── */
+nav {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem 2.5rem;
+  background: rgba(6,10,15,0.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.3rem; letter-spacing: 0.15em; color: var(--healthy); }
+.nav-links { display: flex; gap: 2rem; }
+.nav-links a { color: var(--muted); font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; text-decoration: none; transition: color 0.3s; }
+.nav-links a:hover { color: var(--text); }
+.nav-dot { width: 8px; height: 8px; background: var(--faulty); border-radius: 50%; animation: blink 1.4s ease-in-out infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* ── HERO ── */
+#hero {
+  min-height: 100vh;
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 8rem 5vw 4rem;
+  position: relative; overflow: hidden;
+}
+.hero-grid {
+  position: absolute; inset: 0; opacity: 0.06;
+  background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+.hero-ring {
+  position: absolute; right: -10vw; top: 50%; transform: translateY(-50%);
+  width: 55vw; height: 55vw; max-width: 700px; max-height: 700px;
+  border-radius: 50%;
+  border: 1px solid rgba(0,229,160,0.08);
+  animation: spin 40s linear infinite;
+}
+.hero-ring::before {
+  content: ''; position: absolute; inset: 15%;
+  border-radius: 50%;
+  border: 1px solid rgba(255,61,90,0.08);
+  animation: spin 25s linear infinite reverse;
+}
+.hero-ring::after {
+  content: ''; position: absolute; inset: 30%;
+  border-radius: 50%; background: radial-gradient(circle, rgba(0,229,160,0.05) 0%, transparent 70%);
+}
+@keyframes spin { to { transform: translateY(-50%) rotate(360deg); } }
+.hero-eyebrow { font-family: 'Space Mono', monospace; font-size: 0.75rem; color: var(--healthy); letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.75rem; }
+.hero-eyebrow::before { content: ''; display: block; width: 30px; height: 1px; background: var(--healthy); }
+h1 { font-family: 'Syne', sans-serif; font-weight: 800; font-size: clamp(3rem, 7vw, 6.5rem); line-height: 0.95; color: var(--text); max-width: 700px; }
+h1 span { color: var(--healthy); }
+.hero-sub { margin-top: 2rem; max-width: 480px; color: var(--muted); font-size: 1.05rem; line-height: 1.7; }
+.hero-stats { margin-top: 3.5rem; display: flex; gap: 3rem; }
+.hero-stat { }
+.hero-stat .num { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 2.5rem; color: var(--text); }
+.hero-stat .label { font-size: 0.72rem; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 0.2rem; }
+.hero-stat .num.green { color: var(--healthy); }
+.hero-stat .num.red { color: var(--faulty); }
+.scroll-hint { margin-top: 4rem; display: flex; align-items: center; gap: 0.75rem; color: var(--muted); font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; }
+.scroll-arrow { width: 28px; height: 28px; border: 1px solid var(--muted); border-radius: 50%; display: flex; align-items: center; justify-content: center; animation: bounce 2s ease-in-out infinite; }
+@keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(4px)} }
+
+/* ── SECTIONS ── */
+section { padding: 7rem 5vw; position: relative; }
+.section-label {
+  font-family: 'Space Mono', monospace; font-size: 0.7rem; color: var(--healthy);
+  letter-spacing: 0.25em; text-transform: uppercase;
+  display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.2rem;
+}
+.section-label span { color: var(--muted); }
+h2 { font-family: 'Syne', sans-serif; font-weight: 700; font-size: clamp(1.8rem, 4vw, 3rem); margin-bottom: 1.2rem; }
+.section-intro { color: var(--muted); font-size: 1rem; max-width: 580px; line-height: 1.8; margin-bottom: 3rem; }
+
+/* ── STICKY SCROLL ── */
+.sticky-section { display: flex; gap: 4rem; }
+.sticky-narrative { width: 380px; flex-shrink: 0; }
+.sticky-viz { flex: 1; position: sticky; top: 100px; height: calc(100vh - 120px); }
+.narrative-step {
+  min-height: 60vh; padding: 2rem 0;
+  opacity: 0.25; transition: opacity 0.4s;
+}
+.narrative-step.active { opacity: 1; }
+.narrative-step h3 { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 1.35rem; margin-bottom: 0.8rem; }
+.narrative-step p { color: var(--muted); line-height: 1.8; font-size: 0.95rem; }
+.step-tag { display: inline-block; padding: 0.3rem 0.8rem; border-radius: 4px; font-family: 'Space Mono', monospace; font-size: 0.68rem; letter-spacing: 0.1em; margin-bottom: 1rem; }
+.tag-healthy { background: rgba(0,229,160,0.1); color: var(--healthy); border: 1px solid rgba(0,229,160,0.2); }
+.tag-faulty { background: rgba(255,61,90,0.1); color: var(--faulty); border: 1px solid rgba(255,61,90,0.2); }
+.tag-info { background: rgba(245,166,35,0.1); color: var(--accent); border: 1px solid rgba(245,166,35,0.2); }
+
+/* ── CHART CONTAINERS ── */
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px; padding: 1.5rem;
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column;
+  transition: all 0.5s ease;
+}
+.chart-card h4 { font-family: 'Syne', sans-serif; font-size: 1rem; font-weight: 600; margin-bottom: 0.3rem; }
+.chart-card .chart-sub { font-size: 0.75rem; color: var(--muted); margin-bottom: 1.2rem; }
+.chart-inner { flex: 1; min-height: 0; }
+svg text { font-family: 'Space Mono', monospace; }
+
+/* ── FEATURE GRID ── */
+.features { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.2rem; margin-top: 2rem; }
+.feature-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.8rem;
+  transition: border-color 0.3s, transform 0.3s;
+}
+.feature-card:hover { border-color: rgba(0,229,160,0.3); transform: translateY(-3px); }
+.feature-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; margin-bottom: 1rem; }
+.feature-card h4 { font-family: 'Syne', sans-serif; font-weight: 600; font-size: 1rem; margin-bottom: 0.6rem; }
+.feature-card p { color: var(--muted); font-size: 0.85rem; line-height: 1.7; }
+
+/* ── GAUGE ── */
+.gauge-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+.gauge-item { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.2rem; text-align: center; }
+.gauge-item .g-label { font-size: 0.7rem; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.8rem; }
+.gauge-item .g-val { font-family: 'Space Mono', monospace; font-size: 1.4rem; font-weight: 700; }
+.gauge-item .g-bar { height: 4px; background: var(--border); border-radius: 2px; margin-top: 0.6rem; overflow: hidden; }
+.gauge-item .g-fill { height: 100%; border-radius: 2px; transition: width 1s ease; }
+
+/* ── EXPLORER ── */
+.explorer-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; }
+.explorer-controls { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+.ctrl-group { display: flex; flex-direction: column; gap: 0.4rem; }
+.ctrl-group label { font-size: 0.72rem; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
+.ctrl-group select {
+  background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+  padding: 0.5rem 1rem; border-radius: 8px; font-family: 'Space Mono', monospace; font-size: 0.78rem; cursor: pointer; outline: none;
+  transition: border-color 0.3s;
+}
+.ctrl-group select:hover { border-color: rgba(0,229,160,0.4); }
+.legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
+.explorer-legend { display: flex; gap: 1.5rem; align-items: center; margin-bottom: 1rem; font-size: 0.8rem; color: var(--muted); }
+
+/* ── DIVIDER ── */
+.divider { height: 1px; background: var(--border); margin: 0 5vw; }
+
+/* ── FOOTER ── */
+footer {
+  padding: 4rem 5vw 3rem;
+  border-top: 1px solid var(--border);
+}
+.footer-inner { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 2rem; }
+.footer-brand .logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.4rem; color: var(--healthy); margin-bottom: 0.5rem; }
+.footer-brand p { color: var(--muted); font-size: 0.82rem; max-width: 280px; line-height: 1.7; }
+.footer-info { }
+.footer-info h5 { font-size: 0.72rem; color: var(--muted); letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 0.8rem; }
+.footer-info p { color: var(--muted); font-size: 0.82rem; line-height: 1.7; }
+.footer-bottom { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
+.footer-bottom p { color: var(--muted); font-size: 0.78rem; }
+
+/* ── TOOLTIP ── */
+.tooltip {
+  position: fixed; pointer-events: none; z-index: 200;
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+  padding: 0.7rem 1rem; font-size: 0.78rem; color: var(--text);
+  backdrop-filter: blur(10px); display: none;
+  font-family: 'Space Mono', monospace;
+}
+.tooltip.show { display: block; }
+
+/* ── ANIMATIONS ── */
+.fade-in { opacity: 0; transform: translateY(20px); transition: opacity 0.7s ease, transform 0.7s ease; }
+.fade-in.visible { opacity: 1; transform: translateY(0); }
+
+/* ── HIGHLIGHT ── */
+.highlight { color: var(--healthy); font-weight: 500; }
+.highlight-red { color: var(--faulty); font-weight: 500; }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">PULSE</div>
+  <div class="nav-links">
+    <a href="#overview">Overview</a>
+    <a href="#patterns">Patterns</a>
+    <a href="#signals">Signals</a>
+    <a href="#explorer">Explore</a>
+  </div>
+  <div class="nav-dot"></div>
+</nav>
+
+<!-- TOOLTIP -->
+<div class="tooltip" id="tooltip"></div>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-ring"></div>
+  <div class="hero-eyebrow">Engine Telemetry Intelligence</div>
+  <h1>When does an<br><span>engine</span><br>fail?</h1>
+  <p class="hero-sub">A data story across 19,535 engine readings — uncovering the hidden patterns that separate healthy machines from failing ones before it's too late.</p>
+  <div class="hero-stats">
+    <div class="hero-stat"><div class="num">19,535</div><div class="label">Total Readings</div></div>
+    <div class="hero-stat"><div class="num green">63.1%</div><div class="label">Healthy Engines</div></div>
+    <div class="hero-stat"><div class="num red">36.9%</div><div class="label">Fault Detected</div></div>
+  </div>
+  <div class="scroll-hint">
+    <div class="scroll-arrow">↓</div> Scroll to explore the story
+  </div>
+</section>
+
+<!-- SECTION 1: OVERVIEW -->
+<section id="overview" style="background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+  <div class="section-label">Chapter 01 <span>/ Dataset Overview</span></div>
+  <h2>The Fleet at a Glance</h2>
+  <p class="section-intro">Six sensor streams. One classification. Over 19 thousand moments captured. The dataset reveals a fleet under stress — more than 1 in 3 engines show signs of fault.</p>
+
+  <div class="features fade-in">
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(0,229,160,0.1); color:var(--healthy);">⚙️</div>
+      <h4>Engine RPM</h4>
+      <p>Rotational speed of the engine. Faulty engines run, on average, <span class="highlight-red">20% faster</span> than healthy ones — a key early warning signal.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(255,61,90,0.1); color:var(--faulty);">🛢️</div>
+      <h4>Lub Oil Pressure</h4>
+      <p>Lubrication oil pressure in bar. Critical for reducing friction. Healthy engines maintain optimal pressure ranges more consistently.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(245,166,35,0.1); color:var(--accent);">⛽</div>
+      <h4>Fuel Pressure</h4>
+      <p>Fuel delivery pressure. Wide variance in both groups but healthy engines show <span class="highlight">higher average</span> fuel pressure (6.9 vs 6.2 bar).</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(100,149,237,0.1); color:#6495ed;">💧</div>
+      <h4>Coolant Pressure</h4>
+      <p>Cooling system pressure. Extreme outliers in either direction often precede engine faults in the historical data.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(0,229,160,0.08); color:var(--healthy);">🌡️</div>
+      <h4>Lub Oil Temp</h4>
+      <p>Temperature of the lubricating oil. Faulty engines run <span class="highlight-red">slightly hotter</span> on average (78°C vs 77.4°C for healthy).</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(255,61,90,0.08); color:var(--faulty);">🌡️</div>
+      <h4>Coolant Temp</h4>
+      <p>Coolant temperature. Healthy engines show <span class="highlight">higher average</span> coolant temp (78.2°C), though both groups overlap significantly.</p>
+    </div>
+  </div>
+
+  <!-- Donut & breakdown -->
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; margin-top:2.5rem;" class="fade-in">
+    <div class="chart-card">
+      <h4>Condition Distribution</h4>
+      <div class="chart-sub">Healthy vs Faulty across all 19,535 readings</div>
+      <div class="chart-inner" id="donut-chart"></div>
+    </div>
+    <div class="chart-card">
+      <h4>Sensor Averages by Condition</h4>
+      <div class="chart-sub">Mean values normalized — green = healthy, red = faulty</div>
+      <div class="chart-inner" id="bar-compare-chart"></div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 2: SCROLLY RPM PATTERNS -->
+<section id="patterns">
+  <div class="section-label">Chapter 02 <span>/ Scrollytelling</span></div>
+  <h2>RPM: The Loudest Signal</h2>
+  <p class="section-intro">As you scroll through this chapter, watch the distribution shift — revealing how engine speed behaves differently across health states.</p>
+
+  <div class="sticky-section">
+    <div class="sticky-narrative">
+      <div class="narrative-step active" data-step="0">
+        <div class="step-tag tag-info">Step 1</div>
+        <h3>All Engines, All Data</h3>
+        <p>Here are all 19,535 engine readings plotted by RPM. The distribution spans from below 400 to over 2,000 RPM — a wide operational range. At first glance, it looks like a single, relatively normal distribution.</p>
+      </div>
+      <div class="narrative-step" data-step="1">
+        <div class="step-tag tag-healthy">Healthy</div>
+        <h3>Healthy Engines Peak Earlier</h3>
+        <p>Isolating <span class="highlight">healthy engines</span>, the distribution peaks around <strong style="color:var(--healthy)">700–750 RPM</strong>. They tend to operate at lower, steadier rotational speeds — a hallmark of well-maintained machinery running within design limits.</p>
+      </div>
+      <div class="narrative-step" data-step="2">
+        <div class="step-tag tag-faulty">Faulty</div>
+        <h3>Faulty Engines Run Hotter & Faster</h3>
+        <p>Faulty engines show a distribution shifted right — peaking near <strong style="color:var(--faulty)">900–950 RPM</strong> on average. Stress, wear, and compensatory mechanisms can cause engines to spin harder. The mean difference: <strong>+148 RPM</strong> for faulty units.</p>
+      </div>
+      <div class="narrative-step" data-step="3">
+        <div class="step-tag tag-info">Overlap</div>
+        <h3>Separation Is Subtle, Not Absolute</h3>
+        <p>Overlaid together, the two distributions share significant overlap. This is why <em>RPM alone cannot diagnose a fault</em> — but combined with other sensor signals, it becomes a powerful discriminating feature.</p>
+      </div>
+    </div>
+
+    <div class="sticky-viz">
+      <div class="chart-card" style="height:100%;">
+        <h4 id="scrolly-title">All Engine Readings — RPM Distribution</h4>
+        <div class="chart-sub" id="scrolly-sub">19,535 readings across all conditions</div>
+        <div class="chart-inner" id="scrolly-chart" style="min-height:400px;"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 3: SIGNALS -->
+<section id="signals" style="background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);">
+  <div class="section-label">Chapter 03 <span>/ Multi-Sensor Analysis</span></div>
+  <h2>Reading the Warning Signs</h2>
+  <p class="section-intro">No single sensor tells the full story. But together, six streams of data form a pattern — like vital signs for a machine.</p>
+
+  <!-- GAUGE GRID -->
+  <div style="margin-bottom:2.5rem;" class="fade-in">
+    <div style="margin-bottom:1rem; font-size:0.8rem; color:var(--muted);">Live sensor comparison — mean values: <span style="color:var(--healthy)">■ Healthy</span> &nbsp; <span style="color:var(--faulty)">■ Faulty</span></div>
+    <div class="gauge-grid" id="gauge-grid"></div>
+  </div>
+
+  <!-- SCATTER -->
+  <div class="chart-card fade-in" style="margin-bottom:1.5rem;">
+    <h4>RPM vs Coolant Temperature — All Readings</h4>
+    <div class="chart-sub">200-point sample. Color = engine condition. Hover for details.</div>
+    <div class="chart-inner" id="scatter-chart" style="min-height:400px;"></div>
+  </div>
+
+  <!-- VIOLIN / BOX PLOTS -->
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem;" class="fade-in">
+    <div class="chart-card">
+      <h4>Fuel Pressure Distribution</h4>
+      <div class="chart-sub">Box plot by engine condition</div>
+      <div class="chart-inner" id="box-fuel"></div>
+    </div>
+    <div class="chart-card">
+      <h4>Lub Oil Pressure Distribution</h4>
+      <div class="chart-sub">Box plot by engine condition</div>
+      <div class="chart-inner" id="box-oil"></div>
+    </div>
+  </div>
+</section>
+
+<!-- SECTION 4: EXPLORER -->
+<section id="explorer">
+  <div class="section-label">Chapter 04 <span>/ Reader-Driven Exploration</span></div>
+  <h2>Your Turn to Explore</h2>
+  <p class="section-intro">Switch axes, filter conditions, and discover your own insights. This is where the narrative opens up — and curiosity takes the wheel.</p>
+
+  <div class="explorer-wrap fade-in">
+    <div class="explorer-controls">
+      <div class="ctrl-group">
+        <label>X Axis</label>
+        <select id="x-axis">
+          <option value="rpm">Engine RPM</option>
+          <option value="lub_oil_pressure">Lub Oil Pressure</option>
+          <option value="fuel_pressure">Fuel Pressure</option>
+          <option value="coolant_pressure">Coolant Pressure</option>
+          <option value="lub_oil_temp">Lub Oil Temp</option>
+          <option value="coolant_temp">Coolant Temp</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <label>Y Axis</label>
+        <select id="y-axis">
+          <option value="coolant_temp">Coolant Temp</option>
+          <option value="rpm">Engine RPM</option>
+          <option value="lub_oil_pressure">Lub Oil Pressure</option>
+          <option value="fuel_pressure">Fuel Pressure</option>
+          <option value="coolant_pressure">Coolant Pressure</option>
+          <option value="lub_oil_temp">Lub Oil Temp</option>
+        </select>
+      </div>
+      <div class="ctrl-group">
+        <label>Show</label>
+        <select id="filter-condition">
+          <option value="all">All Engines</option>
+          <option value="1">Healthy Only</option>
+          <option value="0">Faulty Only</option>
+        </select>
+      </div>
+    </div>
+    <div class="explorer-legend">
+      <span><span class="legend-dot" style="background:var(--healthy)"></span>Healthy</span>
+      <span><span class="legend-dot" style="background:var(--faulty)"></span>Faulty</span>
+    </div>
+    <div id="explorer-chart" style="height:460px;"></div>
+  </div>
+</section>
+
+<!-- SECTION 5: KEY FINDINGS -->
+<section style="background: linear-gradient(135deg, rgba(0,229,160,0.04) 0%, transparent 60%);">
+  <div class="section-label">Chapter 05 <span>/ Findings & Conclusions</span></div>
+  <h2>What the Data Tells Us</h2>
+  <p class="section-intro">After analyzing 19,535 engine readings across six sensor dimensions, three clear patterns emerged.</p>
+
+  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:1.5rem;" class="fade-in">
+    <div style="background:var(--surface); border:1px solid rgba(0,229,160,0.2); border-radius:16px; padding:2rem;">
+      <div style="font-family:'Space Mono',monospace; font-size:2.5rem; color:var(--healthy); font-weight:700; margin-bottom:1rem;">01</div>
+      <h3 style="font-family:'Syne',sans-serif; font-weight:700; font-size:1.2rem; margin-bottom:0.8rem;">RPM Is the Strongest Discriminator</h3>
+      <p style="color:var(--muted); font-size:0.88rem; line-height:1.8;">Faulty engines operate at significantly higher RPM (mean 885 vs 736). This 20% elevation likely reflects compensatory mechanisms or underlying mechanical stress.</p>
+    </div>
+    <div style="background:var(--surface); border:1px solid rgba(255,61,90,0.2); border-radius:16px; padding:2rem;">
+      <div style="font-family:'Space Mono',monospace; font-size:2.5rem; color:var(--faulty); font-weight:700; margin-bottom:1rem;">02</div>
+      <h3 style="font-family:'Syne',sans-serif; font-weight:700; font-size:1.2rem; margin-bottom:0.8rem;">Fuel Pressure Drops in Fault Conditions</h3>
+      <p style="color:var(--muted); font-size:0.88rem; line-height:1.8;">Healthy engines show higher average fuel pressure (6.9 vs 6.2 bar). Low fuel pressure may indicate delivery failure, clogging, or pump wear — a compounding fault factor.</p>
+    </div>
+    <div style="background:var(--surface); border:1px solid rgba(245,166,35,0.2); border-radius:16px; padding:2rem;">
+      <div style="font-family:'Space Mono',monospace; font-size:2.5rem; color:var(--accent); font-weight:700; margin-bottom:1rem;">03</div>
+      <h3 style="font-family:'Syne',sans-serif; font-weight:700; font-size:1.2rem; margin-bottom:0.8rem;">Multi-Sensor Fusion Is Essential</h3>
+      <p style="color:var(--muted); font-size:0.88rem; line-height:1.8;">No single sensor cleanly separates healthy from faulty engines. The most predictive insight comes from the <em>combination</em> of signals — pointing to the need for multi-variable anomaly detection.</p>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <div class="logo">PULSE</div>
+      <p>Engine Health Intelligence — A Narrative Visualization project exploring predictive maintenance through data storytelling.</p>
+    </div>
+    <div class="footer-info">
+      <h5>Dataset</h5>
+      <p>engine_data.csv — 19,535 readings<br>6 sensor features + binary condition label<br>Source: Industrial Engine Telemetry</p>
+    </div>
+    <div class="footer-info">
+      <h5>Project Team</h5>
+      <p>Narrative Web Visualization<br>Data Analysis & Scrollytelling<br>Submission: 10th May, 2026</p>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <p>Acknowledgements: Dataset via course materials. Visualization built with D3.js v7. Design by the team.</p>
+    <p style="color:var(--muted); font-size:0.72rem;">PULSE — Engine Condition Visualization © 2026</p>
+  </div>
+</footer>
+
+<script>
+// ── DATA ──
+const SAMPLE_DATA = [{"rpm":874,"lub_oil_pressure":2.834351459,"fuel_pressure":7.610327306,"coolant_pressure":2.377734308,"lub_oil_temp":77.23053781,"coolant_temp":73.50711626,"condition":1},{"rpm":702,"lub_oil_pressure":4.964932391,"fuel_pressure":6.605684692,"coolant_pressure":3.72012569,"lub_oil_temp":76.59954024,"coolant_temp":71.69536072,"condition":0},{"rpm":413,"lub_oil_pressure":1.991852775,"fuel_pressure":8.795841104,"coolant_pressure":1.547008199,"lub_oil_temp":75.15242032,"coolant_temp":86.4806402,"condition":1},{"rpm":565,"lub_oil_pressure":4.401158748,"fuel_pressure":8.916302191,"coolant_pressure":1.497986732,"lub_oil_temp":77.03110959,"coolant_temp":82.32366416,"condition":1},{"rpm":1081,"lub_oil_pressure":2.381735211,"fuel_pressure":4.94877963,"coolant_pressure":0.87561062,"lub_oil_temp":80.26236218,"coolant_temp":78.74087327,"condition":0},{"rpm":451,"lub_oil_pressure":2.430460895,"fuel_pressure":4.683832479,"coolant_pressure":1.661945911,"lub_oil_temp":75.90694977,"coolant_temp":76.31645558,"condition":0},{"rpm":931,"lub_oil_pressure":3.370113427,"fuel_pressure":5.226584351,"coolant_pressure":2.330063276,"lub_oil_temp":75.54782709,"coolant_temp":66.18530536,"condition":0},{"rpm":786,"lub_oil_pressure":2.814893662,"fuel_pressure":6.213294104,"coolant_pressure":1.352433216,"lub_oil_temp":76.78497768,"coolant_temp":68.00710616,"condition":0},{"rpm":952,"lub_oil_pressure":3.981049318,"fuel_pressure":10.04483376,"coolant_pressure":3.339994312,"lub_oil_temp":74.27553679,"coolant_temp":79.61737473,"condition":0},{"rpm":447,"lub_oil_pressure":4.900772642,"fuel_pressure":7.183558629,"coolant_pressure":3.213952649,"lub_oil_temp":77.12035201,"coolant_temp":67.11252405,"condition":1},{"rpm":776,"lub_oil_pressure":2.271856877,"fuel_pressure":6.135421624,"coolant_pressure":1.203684803,"lub_oil_temp":74.75548888,"coolant_temp":79.09666582,"condition":0},{"rpm":787,"lub_oil_pressure":3.528032914,"fuel_pressure":5.273718007,"coolant_pressure":3.154799436,"lub_oil_temp":82.62938768,"coolant_temp":73.53425469,"condition":1},{"rpm":461,"lub_oil_pressure":2.195533418,"fuel_pressure":5.99633304,"coolant_pressure":6.881109842,"lub_oil_temp":84.45590568,"coolant_temp":83.28879849,"condition":0},{"rpm":803,"lub_oil_pressure":2.866638208,"fuel_pressure":3.54146786,"coolant_pressure":2.802375821,"lub_oil_temp":77.14275589,"coolant_temp":84.63264249,"condition":0},{"rpm":856,"lub_oil_pressure":0.150336505,"fuel_pressure":5.72598929,"coolant_pressure":1.31082765,"lub_oil_temp":76.41489495,"coolant_temp":82.09914782,"condition":1},{"rpm":734,"lub_oil_pressure":3.424072451,"fuel_pressure":8.105115513,"coolant_pressure":2.317482549,"lub_oil_temp":74.44178521,"coolant_temp":68.06547225,"condition":1},{"rpm":428,"lub_oil_pressure":2.630313601,"fuel_pressure":14.17804375,"coolant_pressure":2.88409458,"lub_oil_temp":82.30823877,"coolant_temp":76.84327691,"condition":1},{"rpm":817,"lub_oil_pressure":1.802659212,"fuel_pressure":11.83786602,"coolant_pressure":1.59932056,"lub_oil_temp":76.85877669,"coolant_temp":75.9698716,"condition":1},{"rpm":741,"lub_oil_pressure":2.302088695,"fuel_pressure":6.591389552,"coolant_pressure":2.414691031,"lub_oil_temp":77.82694717,"coolant_temp":83.81437503,"condition":1},{"rpm":799,"lub_oil_pressure":4.07933138,"fuel_pressure":5.561038519,"coolant_pressure":2.380121984,"lub_oil_temp":74.99682729,"coolant_temp":70.60036097,"condition":1},{"rpm":548,"lub_oil_pressure":1.987983547,"fuel_pressure":8.270534004,"coolant_pressure":2.319625246,"lub_oil_temp":73.87026017,"coolant_temp":84.29503517,"condition":1},{"rpm":733,"lub_oil_pressure":3.52925596,"fuel_pressure":4.225828905,"coolant_pressure":2.395546058,"lub_oil_temp":76.60517261,"coolant_temp":73.91475538,"condition":0},{"rpm":960,"lub_oil_pressure":2.474815926,"fuel_pressure":3.485563544,"coolant_pressure":2.302324034,"lub_oil_temp":77.74206967,"coolant_temp":85.01075125,"condition":0},{"rpm":1189,"lub_oil_pressure":2.201599686,"fuel_pressure":4.168997604,"coolant_pressure":0.953502163,"lub_oil_temp":77.73610924,"coolant_temp":69.5217631,"condition":1},{"rpm":526,"lub_oil_pressure":3.823923492,"fuel_pressure":6.72437969,"coolant_pressure":1.126513662,"lub_oil_temp":74.73857282,"coolant_temp":82.75200428,"condition":1},{"rpm":701,"lub_oil_pressure":2.552817744,"fuel_pressure":4.297763491,"coolant_pressure":3.177603487,"lub_oil_temp":82.93711855,"coolant_temp":73.91138545,"condition":0},{"rpm":1000,"lub_oil_pressure":3.296396721,"fuel_pressure":3.809594953,"coolant_pressure":2.263667878,"lub_oil_temp":75.61763641,"coolant_temp":89.73362683,"condition":1},{"rpm":697,"lub_oil_pressure":1.901855721,"fuel_pressure":5.619076845,"coolant_pressure":0.718926178,"lub_oil_temp":75.77368402,"coolant_temp":68.15735024,"condition":0},{"rpm":506,"lub_oil_pressure":3.681478339,"fuel_pressure":3.462003733,"coolant_pressure":1.419741241,"lub_oil_temp":73.78645993,"coolant_temp":84.08288842,"condition":1},{"rpm":902,"lub_oil_pressure":3.939405861,"fuel_pressure":7.667381428,"coolant_pressure":2.685603015,"lub_oil_temp":76.68024025,"coolant_temp":68.94950243,"condition":1},{"rpm":734,"lub_oil_pressure":3.344163082,"fuel_pressure":5.173060455,"coolant_pressure":1.867627458,"lub_oil_temp":77.34889648,"coolant_temp":74.12053709,"condition":1},{"rpm":480,"lub_oil_pressure":3.230848075,"fuel_pressure":7.312983404,"coolant_pressure":2.578139573,"lub_oil_temp":82.06816885,"coolant_temp":79.5841692,"condition":0},{"rpm":646,"lub_oil_pressure":3.874168632,"fuel_pressure":9.286236106,"coolant_pressure":2.344518236,"lub_oil_temp":76.28996649,"coolant_temp":82.53136088,"condition":1},{"rpm":1624,"lub_oil_pressure":3.676106176,"fuel_pressure":7.792617362,"coolant_pressure":1.887322446,"lub_oil_temp":80.10364251,"coolant_temp":70.55833111,"condition":1},{"rpm":965,"lub_oil_pressure":5.528485957,"fuel_pressure":15.00123557,"coolant_pressure":1.980969519,"lub_oil_temp":77.00374174,"coolant_temp":81.29883437,"condition":1},{"rpm":632,"lub_oil_pressure":2.924839552,"fuel_pressure":10.57647789,"coolant_pressure":1.871845355,"lub_oil_temp":74.54114587,"coolant_temp":85.15134395,"condition":1},{"rpm":980,"lub_oil_pressure":1.941986139,"fuel_pressure":7.271212592,"coolant_pressure":1.894477683,"lub_oil_temp":77.02600525,"coolant_temp":72.28876958,"condition":1},{"rpm":1642,"lub_oil_pressure":1.93863158,"fuel_pressure":9.87297654,"coolant_pressure":1.379535351,"lub_oil_temp":76.13889264,"coolant_temp":79.8374846,"condition":0},{"rpm":704,"lub_oil_pressure":2.5477223,"fuel_pressure":6.255567975,"coolant_pressure":5.439666447,"lub_oil_temp":77.45744233,"coolant_temp":73.69749314,"condition":0},{"rpm":502,"lub_oil_pressure":2.510157415,"fuel_pressure":4.508193446,"coolant_pressure":2.445826097,"lub_oil_temp":86.14107118,"coolant_temp":71.78066044,"condition":1},{"rpm":1514,"lub_oil_pressure":3.338063221,"fuel_pressure":5.319598267,"coolant_pressure":1.568673652,"lub_oil_temp":77.16137578,"coolant_temp":81.09809522,"condition":1},{"rpm":1379,"lub_oil_pressure":2.911975289,"fuel_pressure":4.238531439,"coolant_pressure":2.681303587,"lub_oil_temp":76.66443315,"coolant_temp":78.79509015,"condition":0},{"rpm":731,"lub_oil_pressure":0.496264419,"fuel_pressure":7.218306839,"coolant_pressure":2.587663327,"lub_oil_temp":76.2201892,"coolant_temp":71.31798925,"condition":0},{"rpm":959,"lub_oil_pressure":3.577152955,"fuel_pressure":10.01938095,"coolant_pressure":2.197546209,"lub_oil_temp":76.82899895,"coolant_temp":77.19535807,"condition":1},{"rpm":541,"lub_oil_pressure":1.671085497,"fuel_pressure":8.348686948,"coolant_pressure":1.52732712,"lub_oil_temp":73.88506139,"coolant_temp":73.08405268,"condition":1},{"rpm":714,"lub_oil_pressure":2.018115048,"fuel_pressure":7.764358029,"coolant_pressure":4.216226029,"lub_oil_temp":78.08760682,"coolant_temp":70.00552301,"condition":0},{"rpm":1194,"lub_oil_pressure":3.541420357,"fuel_pressure":5.800846005,"coolant_pressure":1.202206718,"lub_oil_temp":75.06398278,"coolant_temp":87.35008363,"condition":1},{"rpm":509,"lub_oil_pressure":3.231693389,"fuel_pressure":7.360826792,"coolant_pressure":0.958961088,"lub_oil_temp":80.35880855,"coolant_temp":78.57048081,"condition":1},{"rpm":1225,"lub_oil_pressure":2.030876521,"fuel_pressure":7.592607561,"coolant_pressure":1.224191296,"lub_oil_temp":77.03333168,"coolant_temp":83.99447351,"condition":1},{"rpm":863,"lub_oil_pressure":2.503027814,"fuel_pressure":7.645533692,"coolant_pressure":1.780864124,"lub_oil_temp":81.95045433,"coolant_temp":90.79108885,"condition":1},{"rpm":1148,"lub_oil_pressure":3.851853587,"fuel_pressure":5.872396799,"coolant_pressure":0.863478979,"lub_oil_temp":77.20579769,"coolant_temp":79.60434813,"condition":1},{"rpm":494,"lub_oil_pressure":3.741788562,"fuel_pressure":4.743916125,"coolant_pressure":1.983570085,"lub_oil_temp":84.09615011,"coolant_temp":79.72206266,"condition":1},{"rpm":546,"lub_oil_pressure":3.858776443,"fuel_pressure":6.43841203,"coolant_pressure":1.597947568,"lub_oil_temp":76.88121418,"coolant_temp":79.30565369,"condition":0},{"rpm":779,"lub_oil_pressure":4.70470076,"fuel_pressure":7.815731872,"coolant_pressure":1.866285392,"lub_oil_temp":75.93396093,"coolant_temp":78.71401498,"condition":1},{"rpm":1483,"lub_oil_pressure":3.354776846,"fuel_pressure":9.970183901,"coolant_pressure":2.351975046,"lub_oil_temp":76.62746543,"coolant_temp":79.7269877,"condition":1},{"rpm":557,"lub_oil_pressure":3.970404992,"fuel_pressure":7.753276815,"coolant_pressure":2.338428612,"lub_oil_temp":76.58313516,"coolant_temp":73.58100726,"condition":0},{"rpm":378,"lub_oil_pressure":3.27956206,"fuel_pressure":13.79490598,"coolant_pressure":2.834864005,"lub_oil_temp":76.81689147,"coolant_temp":68.96694684,"condition":1},{"rpm":1203,"lub_oil_pressure":2.665368319,"fuel_pressure":2.358773106,"coolant_pressure":1.202852648,"lub_oil_temp":78.10193865,"coolant_temp":67.94570791,"condition":1},{"rpm":685,"lub_oil_pressure":3.163822049,"fuel_pressure":6.465317035,"coolant_pressure":1.837146201,"lub_oil_temp":76.8083665,"coolant_temp":69.47205356,"condition":0},{"rpm":722,"lub_oil_pressure":3.56475197,"fuel_pressure":6.563017472,"coolant_pressure":1.809945183,"lub_oil_temp":76.70006515,"coolant_temp":71.70070121,"condition":0},{"rpm":560,"lub_oil_pressure":2.042660093,"fuel_pressure":5.01349931,"coolant_pressure":1.665586957,"lub_oil_temp":74.38422146,"coolant_temp":86.69194756,"condition":0},{"rpm":905,"lub_oil_pressure":3.336252095,"fuel_pressure":6.162150327,"coolant_pressure":2.525118033,"lub_oil_temp":77.49585578,"coolant_temp":86.05548878,"condition":0},{"rpm":838,"lub_oil_pressure":5.602601548,"fuel_pressure":4.659755813,"coolant_pressure":2.789685821,"lub_oil_temp":75.62039194,"coolant_temp":74.28572085,"condition":1},{"rpm":793,"lub_oil_pressure":4.267243539,"fuel_pressure":3.910908609,"coolant_pressure":2.629397407,"lub_oil_temp":76.6395542,"coolant_temp":85.88002803,"condition":0},{"rpm":831,"lub_oil_pressure":3.99666826,"fuel_pressure":6.209742408,"coolant_pressure":2.331627855,"lub_oil_temp":75.1023199,"coolant_temp":68.88691916,"condition":0},{"rpm":877,"lub_oil_pressure":2.801714352,"fuel_pressure":4.173923438,"coolant_pressure":1.756529147,"lub_oil_temp":76.65360587,"coolant_temp":78.67173418,"condition":0},{"rpm":1069,"lub_oil_pressure":2.297863979,"fuel_pressure":8.382381922,"coolant_pressure":2.671107068,"lub_oil_temp":76.22068994,"coolant_temp":71.08712553,"condition":1},{"rpm":877,"lub_oil_pressure":2.209699109,"fuel_pressure":2.282618693,"coolant_pressure":2.761159715,"lub_oil_temp":77.05394509,"coolant_temp":79.94815119,"condition":0},{"rpm":804,"lub_oil_pressure":3.619258428,"fuel_pressure":7.391870141,"coolant_pressure":3.812268112,"lub_oil_temp":76.23412415,"coolant_temp":81.81632036,"condition":1},{"rpm":939,"lub_oil_pressure":3.300785191,"fuel_pressure":9.631912263,"coolant_pressure":2.715128579,"lub_oil_temp":77.03566089,"coolant_temp":82.59231081,"condition":0},{"rpm":432,"lub_oil_pressure":4.683412833,"fuel_pressure":6.713261007,"coolant_pressure":2.479111301,"lub_oil_temp":74.45459422,"coolant_temp":83.5992239,"condition":1},{"rpm":1137,"lub_oil_pressure":2.822741146,"fuel_pressure":6.45176764,"coolant_pressure":2.534248708,"lub_oil_temp":77.48308383,"coolant_temp":77.54798068,"condition":1},{"rpm":1192,"lub_oil_pressure":2.66346948,"fuel_pressure":3.207580083,"coolant_pressure":1.053186576,"lub_oil_temp":77.34445255,"coolant_temp":79.05205476,"condition":1},{"rpm":843,"lub_oil_pressure":5.243362578,"fuel_pressure":6.386482442,"coolant_pressure":2.41147392,"lub_oil_temp":78.0196237,"coolant_temp":85.81167278,"condition":0},{"rpm":814,"lub_oil_pressure":2.58213481,"fuel_pressure":5.51206922,"coolant_pressure":0.760201825,"lub_oil_temp":75.76798435,"coolant_temp":84.19260582,"condition":0},{"rpm":563,"lub_oil_pressure":4.131017397,"fuel_pressure":7.809702668,"coolant_pressure":2.402800217,"lub_oil_temp":77.31557702,"coolant_temp":81.60473639,"condition":0},{"rpm":568,"lub_oil_pressure":2.338067804,"fuel_pressure":4.348166463,"coolant_pressure":1.295767987,"lub_oil_temp":79.29459089,"coolant_temp":77.94300809,"condition":1},{"rpm":705,"lub_oil_pressure":3.156622546,"fuel_pressure":5.375150199,"coolant_pressure":6.625066924,"lub_oil_temp":86.04292338,"coolant_temp":80.59071551,"condition":1},{"rpm":1266,"lub_oil_pressure":4.013943221,"fuel_pressure":11.87844964,"coolant_pressure":1.610831747,"lub_oil_temp":76.78106583,"coolant_temp":76.86600401,"condition":1},{"rpm":976,"lub_oil_pressure":5.516937944,"fuel_pressure":6.495546061,"coolant_pressure":5.192165506,"lub_oil_temp":75.46148606,"coolant_temp":68.6951979,"condition":1},{"rpm":516,"lub_oil_pressure":2.659066815,"fuel_pressure":5.386522828,"coolant_pressure":1.534563311,"lub_oil_temp":75.53188915,"coolant_temp":70.27816184,"condition":1},{"rpm":1397,"lub_oil_pressure":2.888932844,"fuel_pressure":1.845863668,"coolant_pressure":1.371127888,"lub_oil_temp":77.66123218,"coolant_temp":75.50268697,"condition":1},{"rpm":671,"lub_oil_pressure":3.666109837,"fuel_pressure":7.775491523,"coolant_pressure":1.234252713,"lub_oil_temp":84.53836057,"coolant_temp":80.75331221,"condition":1},{"rpm":621,"lub_oil_pressure":2.966153889,"fuel_pressure":5.18134031,"coolant_pressure":1.855006466,"lub_oil_temp":77.14368133,"coolant_temp":80.26864971,"condition":1},{"rpm":529,"lub_oil_pressure":4.436269281,"fuel_pressure":5.417710912,"coolant_pressure":4.217530465,"lub_oil_temp":83.3279985,"coolant_temp":76.05670703,"condition":1},{"rpm":956,"lub_oil_pressure":3.370299174,"fuel_pressure":2.06743247,"coolant_pressure":1.725748921,"lub_oil_temp":78.14982041,"coolant_temp":80.84986509,"condition":0},{"rpm":678,"lub_oil_pressure":3.02515588,"fuel_pressure":3.982757737,"coolant_pressure":1.941779112,"lub_oil_temp":75.91806895,"coolant_temp":72.04401149,"condition":1},{"rpm":975,"lub_oil_pressure":4.705015733,"fuel_pressure":5.242661437,"coolant_pressure":1.51377409,"lub_oil_temp":83.02781118,"coolant_temp":71.24984553,"condition":1},{"rpm":879,"lub_oil_pressure":4.034622902,"fuel_pressure":12.04524108,"coolant_pressure":1.345101602,"lub_oil_temp":76.09112897,"coolant_temp":73.77748828,"condition":0},{"rpm":950,"lub_oil_pressure":3.292651863,"fuel_pressure":7.947772179,"coolant_pressure":1.264068832,"lub_oil_temp":77.0289608,"coolant_temp":81.40521144,"condition":0},{"rpm":998,"lub_oil_pressure":2.149429611,"fuel_pressure":9.005664741,"coolant_pressure":2.011843936,"lub_oil_temp":83.98443599,"coolant_temp":83.41351224,"condition":1},{"rpm":871,"lub_oil_pressure":2.799891859,"fuel_pressure":15.39717137,"coolant_pressure":2.947619793,"lub_oil_temp":76.10207226,"coolant_temp":75.56699308,"condition":1},{"rpm":555,"lub_oil_pressure":3.919556059,"fuel_pressure":5.64149302,"coolant_pressure":2.970139284,"lub_oil_temp":74.98004819,"coolant_temp":83.3426301,"condition":1},{"rpm":713,"lub_oil_pressure":2.903776106,"fuel_pressure":10.36359997,"coolant_pressure":4.560230336,"lub_oil_temp":80.32379525,"coolant_temp":76.85342625,"condition":1},{"rpm":1061,"lub_oil_pressure":2.202339441,"fuel_pressure":4.737073072,"coolant_pressure":1.731459636,"lub_oil_temp":75.00982688,"coolant_temp":87.49650498,"condition":1},{"rpm":1059,"lub_oil_pressure":3.600434706,"fuel_pressure":7.085442326,"coolant_pressure":0.777630074,"lub_oil_temp":80.94431962,"coolant_temp":75.7524775,"condition":1},{"rpm":797,"lub_oil_pressure":4.315816438,"fuel_pressure":5.94080494,"coolant_pressure":1.102620963,"lub_oil_temp":75.68142655,"coolant_temp":85.78668447,"condition":1},{"rpm":681,"lub_oil_pressure":4.507434434,"fuel_pressure":8.621397291,"coolant_pressure":2.026900396,"lub_oil_temp":74.65551731,"coolant_temp":74.90997078,"condition":1},{"rpm":521,"lub_oil_pressure":3.520562594,"fuel_pressure":4.556221405,"coolant_pressure":1.612136365,"lub_oil_temp":76.96322475,"coolant_temp":83.06992085,"condition":1},{"rpm":739,"lub_oil_pressure":4.866686157,"fuel_pressure":5.400781047,"coolant_pressure":1.671129593,"lub_oil_temp":74.82611838,"coolant_temp":76.55825586,"condition":1},{"rpm":548,"lub_oil_pressure":2.285039409,"fuel_pressure":5.536658515,"coolant_pressure":1.343144892,"lub_oil_temp":78.89204172,"coolant_temp":75.59951744,"condition":1},{"rpm":626,"lub_oil_pressure":3.795678463,"fuel_pressure":6.590047446,"coolant_pressure":1.45761535,"lub_oil_temp":76.92366996,"coolant_temp":75.85196672,"condition":1},{"rpm":651,"lub_oil_pressure":3.127390229,"fuel_pressure":5.67178589,"coolant_pressure":2.85737423,"lub_oil_temp":76.73723856,"coolant_temp":65.35913853,"condition":1},{"rpm":758,"lub_oil_pressure":3.719167151,"fuel_pressure":6.993075247,"coolant_pressure":1.238343451,"lub_oil_temp":76.52249992,"coolant_temp":78.76664985,"condition":1},{"rpm":383,"lub_oil_pressure":1.96136424,"fuel_pressure":5.851852714,"coolant_pressure":3.339045381,"lub_oil_temp":85.79271677,"coolant_temp":88.1288038,"condition":1},{"rpm":482,"lub_oil_pressure":2.313265937,"fuel_pressure":5.835267109,"coolant_pressure":2.283657453,"lub_oil_temp":81.71146118,"coolant_temp":70.90147194,"condition":1},{"rpm":825,"lub_oil_pressure":3.384343129,"fuel_pressure":4.496815639,"coolant_pressure":2.763722907,"lub_oil_temp":78.27803397,"coolant_temp":72.14973671,"condition":0},{"rpm":732,"lub_oil_pressure":1.394889289,"fuel_pressure":5.021853031,"coolant_pressure":1.397116525,"lub_oil_temp":84.50506661,"coolant_temp":78.746831,"condition":0},{"rpm":664,"lub_oil_pressure":3.938858848,"fuel_pressure":4.876558613,"coolant_pressure":1.582987312,"lub_oil_temp":76.89144033,"coolant_temp":80.32686929,"condition":1},{"rpm":417,"lub_oil_pressure":4.146478691,"fuel_pressure":8.287486457,"coolant_pressure":1.368444061,"lub_oil_temp":77.11448262,"coolant_temp":93.86211782,"condition":1},{"rpm":517,"lub_oil_pressure":2.54686281,"fuel_pressure":5.394840432,"coolant_pressure":1.376016471,"lub_oil_temp":75.48145003,"coolant_temp":68.48187117,"condition":1},{"rpm":571,"lub_oil_pressure":4.609606167,"fuel_pressure":7.418273473,"coolant_pressure":3.489490387,"lub_oil_temp":73.52509935,"coolant_temp":83.81590204,"condition":1},{"rpm":1073,"lub_oil_pressure":4.590948302,"fuel_pressure":5.817029001,"coolant_pressure":0.995390555,"lub_oil_temp":75.38119861,"coolant_temp":73.49675847,"condition":1},{"rpm":812,"lub_oil_pressure":4.576275395,"fuel_pressure":10.6251349,"coolant_pressure":5.935178951,"lub_oil_temp":76.94146845,"coolant_temp":84.97356476,"condition":1},{"rpm":608,"lub_oil_pressure":4.86637368,"fuel_pressure":4.429138655,"coolant_pressure":3.906856021,"lub_oil_temp":76.21029594,"coolant_temp":70.24339647,"condition":1},{"rpm":600,"lub_oil_pressure":3.107037932,"fuel_pressure":2.244979265,"coolant_pressure":1.759782044,"lub_oil_temp":75.22160404,"coolant_temp":75.525092,"condition":1},{"rpm":652,"lub_oil_pressure":2.252527233,"fuel_pressure":7.415194738,"coolant_pressure":0.515570248,"lub_oil_temp":76.25259086,"coolant_temp":91.60161014,"condition":0},{"rpm":420,"lub_oil_pressure":3.219622352,"fuel_pressure":4.832839312,"coolant_pressure":1.194296456,"lub_oil_temp":78.68669967,"coolant_temp":72.48489037,"condition":0},{"rpm":619,"lub_oil_pressure":4.350691067,"fuel_pressure":9.093115888,"coolant_pressure":2.314456599,"lub_oil_temp":76.82168408,"coolant_temp":92.39866742,"condition":1},{"rpm":502,"lub_oil_pressure":4.352055425,"fuel_pressure":5.07876645,"coolant_pressure":5.869220121,"lub_oil_temp":74.73452244,"coolant_temp":75.91305861,"condition":1},{"rpm":1255,"lub_oil_pressure":2.883164907,"fuel_pressure":3.238176426,"coolant_pressure":2.385527378,"lub_oil_temp":77.01228021,"coolant_temp":89.25532693,"condition":1},{"rpm":507,"lub_oil_pressure":4.708475656,"fuel_pressure":4.222254839,"coolant_pressure":3.614757784,"lub_oil_temp":74.34681163,"coolant_temp":72.93170225,"condition":1},{"rpm":993,"lub_oil_pressure":3.073853469,"fuel_pressure":3.766198717,"coolant_pressure":1.42637402,"lub_oil_temp":84.5507805,"coolant_temp":72.09305165,"condition":1},{"rpm":834,"lub_oil_pressure":5.07602409,"fuel_pressure":3.652050151,"coolant_pressure":1.955598594,"lub_oil_temp":88.60273387,"coolant_temp":72.9241561,"condition":1},{"rpm":839,"lub_oil_pressure":2.099500496,"fuel_pressure":5.687729612,"coolant_pressure":2.477983528,"lub_oil_temp":76.00919952,"coolant_temp":80.44399103,"condition":1},{"rpm":881,"lub_oil_pressure":4.272446935,"fuel_pressure":10.66172603,"coolant_pressure":2.275908137,"lub_oil_temp":84.41994248,"coolant_temp":85.69654082,"condition":0},{"rpm":636,"lub_oil_pressure":4.564783936,"fuel_pressure":12.36988107,"coolant_pressure":1.300691029,"lub_oil_temp":75.54456703,"coolant_temp":74.0955499,"condition":1},{"rpm":794,"lub_oil_pressure":3.70904586,"fuel_pressure":7.004610843,"coolant_pressure":1.998499839,"lub_oil_temp":76.29822474,"coolant_temp":87.77129729,"condition":0},{"rpm":851,"lub_oil_pressure":2.369306493,"fuel_pressure":5.968350974,"coolant_pressure":4.23246651,"lub_oil_temp":86.00747416,"coolant_temp":77.72216621,"condition":0},{"rpm":495,"lub_oil_pressure":4.217896066,"fuel_pressure":1.584585719,"coolant_pressure":1.98698951,"lub_oil_temp":77.42647436,"coolant_temp":78.06838225,"condition":0},{"rpm":1034,"lub_oil_pressure":5.095522484,"fuel_pressure":6.844655455,"coolant_pressure":1.976464764,"lub_oil_temp":75.71202728,"coolant_temp":68.5673482,"condition":1},{"rpm":617,"lub_oil_pressure":3.461928464,"fuel_pressure":6.336159318,"coolant_pressure":1.495317234,"lub_oil_temp":73.98272395,"coolant_temp":67.66260243,"condition":1},{"rpm":637,"lub_oil_pressure":4.811610912,"fuel_pressure":5.159252437,"coolant_pressure":1.614593937,"lub_oil_temp":74.56721243,"coolant_temp":81.44655479,"condition":1},{"rpm":872,"lub_oil_pressure":2.563634809,"fuel_pressure":5.460596854,"coolant_pressure":2.13097643,"lub_oil_temp":82.87267563,"coolant_temp":66.64596447,"condition":1},{"rpm":684,"lub_oil_pressure":2.181097504,"fuel_pressure":8.897160151,"coolant_pressure":3.004070994,"lub_oil_temp":74.85519263,"coolant_temp":80.60382238,"condition":1},{"rpm":903,"lub_oil_pressure":2.376603734,"fuel_pressure":5.643647572,"coolant_pressure":1.144432192,"lub_oil_temp":77.01866571,"coolant_temp":74.68568252,"condition":1},{"rpm":760,"lub_oil_pressure":3.880801659,"fuel_pressure":2.404545727,"coolant_pressure":2.892622364,"lub_oil_temp":84.37412074,"coolant_temp":77.89034425,"condition":0},{"rpm":871,"lub_oil_pressure":3.718158634,"fuel_pressure":5.127574896,"coolant_pressure":2.831366024,"lub_oil_temp":84.85175449,"coolant_temp":80.40020404,"condition":1},{"rpm":1163,"lub_oil_pressure":4.680531418,"fuel_pressure":4.98694035,"coolant_pressure":3.347127962,"lub_oil_temp":75.77799184,"coolant_temp":72.15572807,"condition":1},{"rpm":1025,"lub_oil_pressure":1.926550363,"fuel_pressure":5.958449484,"coolant_pressure":4.158478792,"lub_oil_temp":75.30121576,"coolant_temp":85.98314584,"condition":0},{"rpm":451,"lub_oil_pressure":2.559194924,"fuel_pressure":9.88938241,"coolant_pressure":1.230916978,"lub_oil_temp":74.48004374,"coolant_temp":77.16899283,"condition":1},{"rpm":606,"lub_oil_pressure":3.019264222,"fuel_pressure":7.02494932,"coolant_pressure":1.975191437,"lub_oil_temp":77.41501002,"coolant_temp":70.54112349,"condition":1},{"rpm":748,"lub_oil_pressure":3.796844566,"fuel_pressure":6.261971924,"coolant_pressure":2.611856621,"lub_oil_temp":76.32795052,"coolant_temp":68.19301448,"condition":0},{"rpm":1131,"lub_oil_pressure":2.339745029,"fuel_pressure":8.950186494,"coolant_pressure":2.205943838,"lub_oil_temp":85.83471468,"coolant_temp":73.45029542,"condition":0},{"rpm":582,"lub_oil_pressure":2.166791082,"fuel_pressure":10.65820387,"coolant_pressure":3.115399661,"lub_oil_temp":74.7568665,"coolant_temp":73.53096892,"condition":0},{"rpm":838,"lub_oil_pressure":3.377151875,"fuel_pressure":4.159451141,"coolant_pressure":2.141784028,"lub_oil_temp":77.25819595,"coolant_temp":88.78397112,"condition":1},{"rpm":738,"lub_oil_pressure":4.128577616,"fuel_pressure":3.616545543,"coolant_pressure":1.628879165,"lub_oil_temp":78.46017148,"coolant_temp":72.56549037,"condition":0},{"rpm":931,"lub_oil_pressure":2.581348056,"fuel_pressure":5.002093689,"coolant_pressure":2.250191685,"lub_oil_temp":75.18291514,"coolant_temp":70.14023882,"condition":1},{"rpm":1436,"lub_oil_pressure":4.414597305,"fuel_pressure":13.03311237,"coolant_pressure":2.880989733,"lub_oil_temp":77.13799725,"coolant_temp":83.50389912,"condition":1},{"rpm":565,"lub_oil_pressure":3.68301504,"fuel_pressure":6.685509898,"coolant_pressure":2.622368797,"lub_oil_temp":76.69382003,"coolant_temp":71.56911743,"condition":0},{"rpm":957,"lub_oil_pressure":2.777575984,"fuel_pressure":7.335924216,"coolant_pressure":5.894510901,"lub_oil_temp":74.95661909,"coolant_temp":68.30346916,"condition":0},{"rpm":643,"lub_oil_pressure":2.394383583,"fuel_pressure":4.284258359,"coolant_pressure":1.814112749,"lub_oil_temp":75.56091472,"coolant_temp":78.8187034,"condition":0},{"rpm":628,"lub_oil_pressure":3.176943603,"fuel_pressure":9.029893123,"coolant_pressure":1.024805424,"lub_oil_temp":76.307343,"coolant_temp":72.92485186,"condition":0},{"rpm":451,"lub_oil_pressure":2.72752784,"fuel_pressure":6.166556107,"coolant_pressure":3.002425314,"lub_oil_temp":77.08709034,"coolant_temp":73.96624696,"condition":1},{"rpm":957,"lub_oil_pressure":4.467782391,"fuel_pressure":6.734085168,"coolant_pressure":3.154498811,"lub_oil_temp":76.78408715,"coolant_temp":86.6280098,"condition":0},{"rpm":984,"lub_oil_pressure":2.005240269,"fuel_pressure":6.874849554,"coolant_pressure":1.550618682,"lub_oil_temp":76.0311284,"coolant_temp":84.27614314,"condition":0},{"rpm":843,"lub_oil_pressure":1.736553213,"fuel_pressure":5.508874989,"coolant_pressure":2.434591683,"lub_oil_temp":75.39231018,"coolant_temp":74.73155643,"condition":0},{"rpm":622,"lub_oil_pressure":2.74568988,"fuel_pressure":3.827439143,"coolant_pressure":3.960915335,"lub_oil_temp":74.42723518,"coolant_temp":67.79347082,"condition":1},{"rpm":559,"lub_oil_pressure":5.030074137,"fuel_pressure":6.891127202,"coolant_pressure":3.725667731,"lub_oil_temp":76.31480653,"coolant_temp":78.72202126,"condition":0},{"rpm":928,"lub_oil_pressure":3.047900404,"fuel_pressure":5.811241187,"coolant_pressure":1.825706375,"lub_oil_temp":79.74876427,"coolant_temp":80.22818335,"condition":1},{"rpm":854,"lub_oil_pressure":4.577381147,"fuel_pressure":6.530662281,"coolant_pressure":2.661535161,"lub_oil_temp":77.24524418,"coolant_temp":84.81769122,"condition":1},{"rpm":1136,"lub_oil_pressure":3.039868114,"fuel_pressure":5.951566132,"coolant_pressure":3.092261065,"lub_oil_temp":76.83540959,"coolant_temp":90.32683986,"condition":0},{"rpm":809,"lub_oil_pressure":2.591069325,"fuel_pressure":5.564854821,"coolant_pressure":1.826175849,"lub_oil_temp":78.15619483,"coolant_temp":78.25033346,"condition":1},{"rpm":419,"lub_oil_pressure":3.985887617,"fuel_pressure":7.982368251,"coolant_pressure":3.026964978,"lub_oil_temp":75.22677098,"coolant_temp":80.88261725,"condition":1},{"rpm":1513,"lub_oil_pressure":2.574377229,"fuel_pressure":1.347845098,"coolant_pressure":2.197972427,"lub_oil_temp":75.69997849,"coolant_temp":70.18500064,"condition":0},{"rpm":728,"lub_oil_pressure":2.559098783,"fuel_pressure":4.509129273,"coolant_pressure":2.42747351,"lub_oil_temp":74.8806885,"coolant_temp":74.74344741,"condition":0},{"rpm":920,"lub_oil_pressure":1.93158338,"fuel_pressure":7.938132904,"coolant_pressure":3.459147625,"lub_oil_temp":74.13970579,"coolant_temp":69.89840403,"condition":1},{"rpm":776,"lub_oil_pressure":2.861051391,"fuel_pressure":6.424377405,"coolant_pressure":1.816127908,"lub_oil_temp":76.40583298,"coolant_temp":89.85879563,"condition":1},{"rpm":915,"lub_oil_pressure":2.957126584,"fuel_pressure":10.91519063,"coolant_pressure":2.682538609,"lub_oil_temp":76.89868102,"coolant_temp":79.65903752,"condition":1},{"rpm":802,"lub_oil_pressure":2.6413397,"fuel_pressure":5.916244687,"coolant_pressure":2.641134875,"lub_oil_temp":85.36961212,"coolant_temp":85.10981235,"condition":0},{"rpm":620,"lub_oil_pressure":2.273815771,"fuel_pressure":5.001799002,"coolant_pressure":4.65952495,"lub_oil_temp":77.72272025,"coolant_temp":85.3054607,"condition":0},{"rpm":593,"lub_oil_pressure":3.248104458,"fuel_pressure":6.798222017,"coolant_pressure":1.122142192,"lub_oil_temp":76.9220741,"coolant_temp":77.57305385,"condition":1},{"rpm":811,"lub_oil_pressure":3.07180163,"fuel_pressure":7.091123086,"coolant_pressure":2.746268918,"lub_oil_temp":76.13856678,"coolant_temp":74.83000875,"condition":0},{"rpm":620,"lub_oil_pressure":2.831965758,"fuel_pressure":5.941632479,"coolant_pressure":3.0712438,"lub_oil_temp":75.51821924,"coolant_temp":67.12815388,"condition":1},{"rpm":489,"lub_oil_pressure":2.778089008,"fuel_pressure":5.437664328,"coolant_pressure":1.755012332,"lub_oil_temp":77.82063186,"coolant_temp":78.60322175,"condition":1},{"rpm":435,"lub_oil_pressure":2.70547987,"fuel_pressure":6.900113883,"coolant_pressure":1.181617193,"lub_oil_temp":77.66893835,"coolant_temp":73.29639693,"condition":1},{"rpm":513,"lub_oil_pressure":3.160358975,"fuel_pressure":12.64529309,"coolant_pressure":1.692017947,"lub_oil_temp":75.87172872,"coolant_temp":84.74558618,"condition":1},{"rpm":859,"lub_oil_pressure":3.324412907,"fuel_pressure":6.785775147,"coolant_pressure":2.456591006,"lub_oil_temp":76.6953121,"coolant_temp":84.06220258,"condition":0},{"rpm":805,"lub_oil_pressure":5.68971182,"fuel_pressure":5.797488374,"coolant_pressure":2.394899101,"lub_oil_temp":76.69242805,"coolant_temp":69.39235131,"condition":1},{"rpm":1168,"lub_oil_pressure":2.671261342,"fuel_pressure":8.066906803,"coolant_pressure":0.27211253,"lub_oil_temp":76.96814311,"coolant_temp":85.47039534,"condition":1},{"rpm":439,"lub_oil_pressure":1.604547553,"fuel_pressure":5.319439303,"coolant_pressure":4.745551722,"lub_oil_temp":74.20922187,"coolant_temp":67.24655588,"condition":1},{"rpm":624,"lub_oil_pressure":3.769122016,"fuel_pressure":4.20824578,"coolant_pressure":1.438347808,"lub_oil_temp":76.58840038,"coolant_temp":87.72564053,"condition":0},{"rpm":815,"lub_oil_pressure":5.712042811,"fuel_pressure":5.510682906,"coolant_pressure":2.27506366,"lub_oil_temp":77.78764296,"coolant_temp":88.94956561,"condition":1},{"rpm":872,"lub_oil_pressure":2.648200623,"fuel_pressure":6.743217177,"coolant_pressure":2.668918725,"lub_oil_temp":79.72743413,"coolant_temp":79.07576432,"condition":0},{"rpm":990,"lub_oil_pressure":2.588415849,"fuel_pressure":4.444074803,"coolant_pressure":1.214079161,"lub_oil_temp":83.67638465,"coolant_temp":70.21416068,"condition":0},{"rpm":650,"lub_oil_pressure":3.756576441,"fuel_pressure":3.64838783,"coolant_pressure":3.289407864,"lub_oil_temp":87.08863641,"coolant_temp":88.0156093,"condition":0},{"rpm":389,"lub_oil_pressure":3.246348724,"fuel_pressure":11.09673868,"coolant_pressure":1.447763199,"lub_oil_temp":76.66760666,"coolant_temp":75.54447414,"condition":1},{"rpm":1172,"lub_oil_pressure":2.053936106,"fuel_pressure":8.319995213,"coolant_pressure":2.603505647,"lub_oil_temp":76.96952317,"coolant_temp":82.60795186,"condition":1},{"rpm":1358,"lub_oil_pressure":4.335952912,"fuel_pressure":5.232570652,"coolant_pressure":1.095842954,"lub_oil_temp":77.45802553,"coolant_temp":86.30358033,"condition":1},{"rpm":422,"lub_oil_pressure":2.800016094,"fuel_pressure":9.509489124,"coolant_pressure":1.308560751,"lub_oil_temp":77.1760091,"coolant_temp":71.52253542,"condition":1},{"rpm":732,"lub_oil_pressure":4.048707988,"fuel_pressure":4.890947569,"coolant_pressure":1.222654963,"lub_oil_temp":76.59402024,"coolant_temp":82.46120564,"condition":1},{"rpm":880,"lub_oil_pressure":2.961708849,"fuel_pressure":7.530540057,"coolant_pressure":1.770071583,"lub_oil_temp":80.17214385,"coolant_temp":81.99103038,"condition":0},{"rpm":611,"lub_oil_pressure":2.599493549,"fuel_pressure":7.954179781,"coolant_pressure":2.925841931,"lub_oil_temp":74.32730526,"coolant_temp":72.42851728,"condition":1},{"rpm":1088,"lub_oil_pressure":3.295898473,"fuel_pressure":5.272996668,"coolant_pressure":2.351667953,"lub_oil_temp":78.14286185,"coolant_temp":83.71079712,"condition":1},{"rpm":698,"lub_oil_pressure":4.454381025,"fuel_pressure":1.401523476,"coolant_pressure":2.866881879,"lub_oil_temp":77.27730454,"coolant_temp":73.04722809,"condition":1},{"rpm":901,"lub_oil_pressure":3.384993186,"fuel_pressure":5.596385791,"coolant_pressure":1.003782553,"lub_oil_temp":76.78861843,"coolant_temp":82.57225648,"condition":0},{"rpm":476,"lub_oil_pressure":4.919955545,"fuel_pressure":6.460737283,"coolant_pressure":2.479642655,"lub_oil_temp":77.49976989,"coolant_temp":83.10922154,"condition":1},{"rpm":551,"lub_oil_pressure":3.520859213,"fuel_pressure":6.342256281,"coolant_pressure":1.282708275,"lub_oil_temp":74.61035813,"coolant_temp":78.89244055,"condition":1},{"rpm":656,"lub_oil_pressure":5.407194461,"fuel_pressure":7.119221721,"coolant_pressure":4.566446301,"lub_oil_temp":74.22794639,"coolant_temp":75.38954156,"condition":1},{"rpm":927,"lub_oil_pressure":4.855609548,"fuel_pressure":10.45407294,"coolant_pressure":2.419949531,"lub_oil_temp":84.62503041,"coolant_temp":78.53051873,"condition":1}];
+
+// Stats
+const STATS = {
+  healthy: { rpm: 736.3, lub_oil_pressure: 3.35, fuel_pressure: 6.90, coolant_pressure: 2.32, lub_oil_temp: 77.42, coolant_temp: 78.21 },
+  faulty:  { rpm: 885.0, lub_oil_pressure: 3.22, fuel_pressure: 6.24, coolant_pressure: 2.37, lub_oil_temp: 78.02, coolant_temp: 78.80 }
+};
+
+const LABELS = { rpm:'RPM', lub_oil_pressure:'Lub Oil Press.', fuel_pressure:'Fuel Press.', coolant_pressure:'Coolant Press.', lub_oil_temp:'Oil Temp (°C)', coolant_temp:'Coolant Temp (°C)' };
+const UNITS  = { rpm:'RPM', lub_oil_pressure:'bar', fuel_pressure:'bar', coolant_pressure:'bar', lub_oil_temp:'°C', coolant_temp:'°C' };
+
+const TT = document.getElementById('tooltip');
+function showTT(e, html) { TT.innerHTML = html; TT.classList.add('show'); moveTT(e); }
+function moveTT(e) { TT.style.left = (e.clientX+14)+'px'; TT.style.top = (e.clientY-14)+'px'; }
+function hideTT() { TT.classList.remove('show'); }
+
+// ── 1. DONUT ──
+(function drawDonut(){
+  const el = document.getElementById('donut-chart');
+  const R = () => el.getBoundingClientRect();
+  const w = Math.max(el.clientWidth||300, 300), h = 280;
+  const r = Math.min(w,h)/2 - 20;
+  const data = [{label:'Healthy', val:12317, pct:63.1, color:'#00e5a0'},{label:'Faulty', val:7218, pct:36.9, color:'#ff3d5a'}];
+  const arc = d3.arc().innerRadius(r*0.6).outerRadius(r);
+  const pie = d3.pie().value(d=>d.val).padAngle(0.03);
+  const svg = d3.select(el).append('svg').attr('width','100%').attr('height',h);
+  const g = svg.append('g').attr('transform',`translate(${w*0.4},${h/2})`);
+  g.selectAll('path').data(pie(data)).join('path')
+    .attr('d', arc).attr('fill', d=>d.data.color).attr('opacity',0.85)
+    .on('mouseover', function(e,d){ d3.select(this).attr('opacity',1); showTT(e,`<b>${d.data.label}</b><br>${d.data.val.toLocaleString()} readings<br>${d.data.pct}%`); })
+    .on('mousemove', moveTT).on('mouseleave', function(){ d3.select(this).attr('opacity',0.85); hideTT(); });
+  g.append('text').attr('text-anchor','middle').attr('dy','-0.2em').attr('fill','#e8edf5').attr('font-size','2rem').attr('font-family','Syne,sans-serif').attr('font-weight','700').text('19,535');
+  g.append('text').attr('text-anchor','middle').attr('dy','1.5em').attr('fill','#5a6a80').attr('font-size','0.65rem').text('READINGS');
+  const legend = svg.append('g').attr('transform',`translate(${w*0.72},${h/2-30})`);
+  data.forEach((d,i)=>{
+    const lg = legend.append('g').attr('transform',`translate(0,${i*36})`);
+    lg.append('rect').attr('width',12).attr('height',12).attr('rx',3).attr('fill',d.color);
+    lg.append('text').attr('x',18).attr('y',10).attr('fill','#e8edf5').attr('font-size','0.8rem').text(d.label);
+    lg.append('text').attr('x',18).attr('y',26).attr('fill',d.color).attr('font-size','1.1rem').attr('font-family','Syne,sans-serif').attr('font-weight','700').text(d.pct+'%');
+  });
+})();
+
+// ── 2. BAR COMPARE ──
+(function drawBarCompare(){
+  const el = document.getElementById('bar-compare-chart');
+  const w = el.clientWidth||300, h = 280;
+  const margin = {top:10, right:20, bottom:60, left:80};
+  const iw = w - margin.left - margin.right, ih = h - margin.top - margin.bottom;
+  const keys = ['rpm','lub_oil_pressure','fuel_pressure','coolant_pressure','lub_oil_temp','coolant_temp'];
+  const maxes = { rpm:2239, lub_oil_pressure:7.27, fuel_pressure:21.14, coolant_pressure:7.48, lub_oil_temp:89.58, coolant_temp:195.53 };
+  const norm = (k,v) => v/maxes[k];
+  const svg = d3.select(el).append('svg').attr('width','100%').attr('height',h)
+    .append('g').attr('transform',`translate(${margin.left},${margin.top})`);
+  const y = d3.scaleBand().domain(keys).range([0,ih]).padding(0.3);
+  const x = d3.scaleLinear().domain([0,1]).range([0,iw]);
+  svg.append('g').call(d3.axisLeft(y).tickFormat(k=>LABELS[k])).selectAll('text').attr('fill','#5a6a80').attr('font-size','0.65rem');
+  svg.selectAll('.domain,.tick line').attr('stroke','#1a2a3a');
+  keys.forEach(k=>{
+    const hv = norm(k, STATS.healthy[k]), fv = norm(k, STATS.faulty[k]);
+    svg.append('rect').attr('y',y(k)).attr('height',y.bandwidth()/2-1).attr('x',0).attr('width',x(hv)).attr('fill','#00e5a0').attr('rx',2).attr('opacity',0.8);
+    svg.append('rect').attr('y',y(k)+y.bandwidth()/2+1).attr('height',y.bandwidth()/2-1).attr('x',0).attr('width',x(fv)).attr('fill','#ff3d5a').attr('rx',2).attr('opacity',0.8);
+  });
+})();
+
+// ── 3. SCROLLY HISTOGRAM ──
+let currentStep = 0;
+const scrollyTitles = [
+  ['All Engine Readings — RPM Distribution','19,535 readings across all conditions'],
+  ['Healthy Engines — RPM Distribution','12,317 readings (63.1% of fleet)'],
+  ['Faulty Engines — RPM Distribution','7,218 readings (36.9% of fleet)'],
+  ['Both Conditions Overlaid','Overlap reveals why RPM alone is insufficient']
+];
+
+function drawScrollyChart(step){
+  const el = document.getElementById('scrolly-chart');
+  el.innerHTML = '';
+  const w = el.clientWidth||500, h = el.clientHeight||400;
+  const margin = {top:20,right:20,bottom:50,left:50};
+  const iw = w-margin.left-margin.right, ih = h-margin.top-margin.bottom;
+  const svg = d3.select(el).append('svg').attr('width','100%').attr('height','100%')
+    .attr('viewBox',`0 0 ${w} ${h}`)
+    .append('g').attr('transform',`translate(${margin.left},${margin.top})`);
+  const bins = d3.bin().domain([300,2300]).thresholds(30);
+  const allRPM = SAMPLE_DATA.map(d=>d.rpm);
+  const hRPM = SAMPLE_DATA.filter(d=>d.condition===1).map(d=>d.rpm);
+  const fRPM = SAMPLE_DATA.filter(d=>d.condition===0).map(d=>d.rpm);
+  const allBins = bins(allRPM), hBins = bins(hRPM), fBins = bins(fRPM);
+  const x = d3.scaleLinear().domain([300,2300]).range([0,iw]);
+  const yMax = d3.max(allBins, d=>d.length);
+  const y = d3.scaleLinear().domain([0, yMax+2]).range([ih,0]);
+  svg.append('g').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x).ticks(6)).selectAll('text').attr('fill','#5a6a80').attr('font-size','0.65rem');
+  svg.append('g').call(d3.axisLeft(y).ticks(5)).selectAll('text').attr('fill','#5a6a80').attr('font-size','0.65rem');
+  svg.selectAll('.domain,.tick line').attr('stroke','#1a2a3a');
+  svg.append('text').attr('x',iw/2).attr('y',ih+40).attr('fill','#5a6a80').attr('font-size','0.7rem').attr('text-anchor','middle').text('Engine RPM');
+  svg.append('text').attr('transform','rotate(-90)').attr('x',-ih/2).attr('y',-35).attr('fill','#5a6a80').attr('font-size','0.7rem').attr('text-anchor','middle').text('Count');
+  const drawBars = (binsArr, color, opacity=0.8) => {
+    svg.selectAll(`.bar-${color.replace('#','')}`)
+      .data(binsArr).join('rect')
+      .attr('x', d=>x(d.x0)+1).attr('width', d=>Math.max(0,x(d.x1)-x(d.x0)-2))
+      .attr('y', ih).attr('height',0).attr('fill',color).attr('opacity',opacity).attr('rx',2)
+      .transition().duration(600).attr('y',d=>y(d.length)).attr('height',d=>ih-y(d.length));
+  };
+  if(step===0) drawBars(allBins,'#6495ed');
+  else if(step===1) drawBars(hBins,'#00e5a0');
+  else if(step===2) drawBars(fBins,'#ff3d5a');
+  else { drawBars(hBins,'#00e5a0',0.6); drawBars(fBins,'#ff3d5a',0.5); }
+  document.getElementById('scrolly-title').textContent = scrollyTitles[step][0];
+  document.getElementById('scrolly-sub').textContent = scrollyTitles[step][1];
+}
+drawScrollyChart(0);
+
+// ── 4. SCATTER ──
+(function drawScatter(){
+  const el = document.getElementById('scatter-chart');
+  const w = el.clientWidth||600, h = 400;
+  const margin = {top:20,right:20,bottom:50,left:60};
+  const iw = w-margin.left-margin.right, ih = h-margin.top-margin.bottom;
+  const svg = d3.select(el).append('svg').attr('width','100%').attr('height',h)
+    .append('g').attr('transform',`translate(${margin.left},${margin.top})`);
+  const x = d3.scaleLinear().domain([300,2300]).range([0,iw]);
+  const y = d3.scaleLinear().domain([60,100]).range([ih,0]);
+  svg.append('g').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x).ticks(6)).selectAll('text').attr('fill','#5a6a80').attr('font-size','0.65rem');
+  svg.append('g').call(d3.axisLeft(y).ticks(5)).selectAll('text').attr('fill','#5a6a80').attr('font-size','0.65rem');
+  svg.selectAll('.domain,.tick line').attr('stroke','#1a2a3a');
+  svg.append('text').attr('x',iw/2).attr('y',ih+40).attr('fill','#5a6a80').attr('font-size','0.7rem').attr('text-anchor','middle').text('Engine RPM');
+  svg.append('text').attr('transform','rotate(-90)').attr('x',-ih/2).attr('y',-45).attr('fill','#5a6a80').attr('font-size','0.7rem').attr('text-anchor','middle').text('Coolant Temp (°C)');
+  svg.selectAll('circle').data(SAMPLE_DATA).join('circle')
+    .attr('cx',d=>x(d.rpm)).attr('cy',d=>y(d.coolant_temp))
+    .attr('r',4).attr('fill',d=>d.condition===1?'#00e5a0':'#ff3d5a').attr('opacity',0.55)
+    .on('mouseover', function(e,d){ d3.select(this).attr('r',7).attr('opacity',1); showTT(e,`RPM: ${d.rpm}<br>Coolant: ${d.coolant_temp.toFixed(1)}°C<br>Status: ${d.condition===1?'<span style=color:#00e5a0>Healthy</span>':'<span style=color:#ff3d5a>Faulty</span>'}`); })
+    .on('mousemove', moveTT)
+    .on('mouseleave', function(e,d){ d3.select(this).attr('r',4).attr('opacity',0.55); hideTT(); });
+})();
+
+// ── 5. BOX PLOTS ──
+function drawBox(elId, field) {
+  const el = document.getElementById(elId);
+  const w = el.clientWidth||300, h = 250;
+  const margin = {top:20,right:30,bottom:40,left:50};
+  const iw = w-margin.left-margin.right, ih = h-margin.top-margin.bottom;
+  const groups = [{label:'Healthy',cond:1,color:'#00e5a0'},{label:'Faulty',cond:0,color:'#ff3d5a'}];
+  const svg = d3.select(el).append('svg').attr('width','100%').attr('height',h)
+    .append('g').attr('transform',`translate(${margin.left},${margin.top})`);
+  const vals = SAMPLE_DATA.map(d=>d[field]);
+  const y = d3.scaleLinear().domain([d3.min(vals)-0.5, d3.max(vals)+0.5]).range([ih,0]);
+  const x = d3.scaleBand().domain(['Healthy','Faulty']).range([0,iw]).padding(0.4);
+  svg.append('g').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(x)).selectAll('text').attr('fill','#5a6a80').attr('font-size','0.7rem');
+  svg.append('g').call(d3.axisLeft(y).ticks(5)).selectAll('text').attr('fill','#5a6a80').attr('font-size','0.65rem');
+  svg.selectAll('.domain,.tick line').attr('stroke','#1a2a3a');
+  groups.forEach(g=>{
+    const data = SAMPLE_DATA.filter(d=>d.condition===g.cond).map(d=>d[field]).sort(d3.ascending);
+    const q1 = d3.quantile(data,0.25), q2 = d3.quantile(data,0.5), q3 = d3.quantile(data,0.75);
+    const iqr = q3-q1, wlo = Math.max(d3.min(data),q1-1.5*iqr), whi = Math.min(d3.max(data),q3+1.5*iqr);
+    const cx = x(g.label)+x.bandwidth()/2, bw = x.bandwidth();
+    svg.append('line').attr('x1',cx).attr('x2',cx).attr('y1',y(wlo)).attr('y2',y(whi)).attr('stroke',g.color).attr('stroke-width',1.5).attr('stroke-dasharray','3,2');
+    svg.append('rect').attr('x',x(g.label)).attr('width',bw).attr('y',y(q3)).attr('height',y(q1)-y(q3)).attr('fill',g.color).attr('opacity',0.25).attr('rx',3);
+    svg.append('rect').attr('x',x(g.label)).attr('width',bw).attr('y',y(q3)).attr('height',y(q1)-y(q3)).attr('fill','none').attr('stroke',g.color).attr('stroke-width',1.5).attr('rx',3);
+    svg.append('line').attr('x1',x(g.label)).attr('x2',x(g.label)+bw).attr('y1',y(q2)).attr('y2',y(q2)).attr('stroke',g.color).attr('stroke-width',2.5);
+  });
+  svg.append('text').attr('transform','rotate(-90)').attr('x',-ih/2).attr('y',-38).attr('fill','#5a6a80').attr('font-size','0.65rem').attr('text-anchor','middle').text(`${LABELS[field]} (${UNITS[field]})`);
+}
+drawBox('box-fuel','fuel_pressure');
+drawBox('box-oil','lub_oil_pressure');
+
+// ── 6. GAUGES ──
+(function buildGauges(){
+  const el = document.getElementById('gauge-grid');
+  const keys = ['rpm','lub_oil_pressure','fuel_pressure','coolant_pressure','lub_oil_temp','coolant_temp'];
+  const maxRef = {rpm:2300,lub_oil_pressure:8,fuel_pressure:22,coolant_pressure:8,lub_oil_temp:92,coolant_temp:200};
+  keys.forEach(k=>{
+    const hv = STATS.healthy[k], fv = STATS.faulty[k];
+    const div = document.createElement('div');
+    div.className = 'gauge-item';
+    div.innerHTML = `<div class="g-label">${LABELS[k]}</div>
+      <div class="g-val" style="color:var(--healthy)">${hv.toFixed(2)}<span style="font-size:0.7rem;color:var(--muted)"> ${UNITS[k]}</span></div>
+      <div class="g-bar"><div class="g-fill" style="width:${(hv/maxRef[k]*100).toFixed(1)}%;background:var(--healthy)"></div></div>
+      <div style="margin-top:0.6rem;" class="g-val" style="color:var(--faulty)"><span style="color:var(--faulty)">${fv.toFixed(2)}<span style="font-size:0.7rem;color:var(--muted)"> ${UNITS[k]}</span></span></div>
+      <div class="g-bar"><div class="g-fill" style="width:${(fv/maxRef[k]*100).toFixed(1)}%;background:var(--faulty)"></div></div>`;
+    el.appendChild(div);
+  });
+})();
+
+// ── 7. EXPLORER ──
+let explorerSvg = null;
+function drawExplorer(){
+  const xKey = document.getElementById('x-axis').value;
+  const yKey = document.getElementById('y-axis').value;
+  const condFilter = document.getElementById('filter-condition').value;
+  let data = condFilter==='all' ? SAMPLE_DATA : SAMPLE_DATA.filter(d=>d.condition===+condFilter);
+  const el = document.getElementById('explorer-chart');
+  el.innerHTML = '';
+  const w = el.clientWidth||700, h = 460;
+  const margin = {top:20,right:20,bottom:55,left:65};
+  const iw = w-margin.left-margin.right, ih = h-margin.top-margin.bottom;
+  const svg = d3.select(el).append('svg').attr('width','100%').attr('height',h)
+    .append('g').attr('transform',`translate(${margin.left},${margin.top})`);
+  const xVals = data.map(d=>d[xKey]), yVals = data.map(d=>d[yKey]);
+  const xsc = d3.scaleLinear().domain([d3.min(xVals)-0.5, d3.max(xVals)+0.5]).range([0,iw]);
+  const ysc = d3.scaleLinear().domain([d3.min(yVals)-0.5, d3.max(yVals)+0.5]).range([ih,0]);
+  svg.append('g').attr('transform',`translate(0,${ih})`).call(d3.axisBottom(xsc).ticks(7)).selectAll('text').attr('fill','#5a6a80').attr('font-size','0.65rem');
+  svg.append('g').call(d3.axisLeft(ysc).ticks(6)).selectAll('text').attr('fill','#5a6a80').attr('font-size','0.65rem');
+  svg.selectAll('.domain,.tick line').attr('stroke','#1a2a3a');
+  svg.append('text').attr('x',iw/2).attr('y',ih+44).attr('fill','#5a6a80').attr('font-size','0.75rem').attr('text-anchor','middle').text(`${LABELS[xKey]} (${UNITS[xKey]})`);
+  svg.append('text').attr('transform','rotate(-90)').attr('x',-ih/2).attr('y',-50).attr('fill','#5a6a80').attr('font-size','0.75rem').attr('text-anchor','middle').text(`${LABELS[yKey]} (${UNITS[yKey]})`);
+  svg.selectAll('circle').data(data).join('circle')
+    .attr('cx',d=>xsc(d[xKey])).attr('cy',d=>ysc(d[yKey]))
+    .attr('r',5).attr('fill',d=>d.condition===1?'#00e5a0':'#ff3d5a').attr('opacity',0.55)
+    .on('mouseover', function(e,d){ d3.select(this).attr('r',8).attr('opacity',1); showTT(e,`${LABELS[xKey]}: ${d[xKey].toFixed(2)} ${UNITS[xKey]}<br>${LABELS[yKey]}: ${d[yKey].toFixed(2)} ${UNITS[yKey]}<br>Status: ${d.condition===1?'<span style=color:#00e5a0>Healthy</span>':'<span style=color:#ff3d5a>Faulty</span>'}`); })
+    .on('mousemove', moveTT).on('mouseleave', function(){ d3.select(this).attr('r',5).attr('opacity',0.55); hideTT(); });
+}
+drawExplorer();
+document.getElementById('x-axis').addEventListener('change', drawExplorer);
+document.getElementById('y-axis').addEventListener('change', drawExplorer);
+document.getElementById('filter-condition').addEventListener('change', drawExplorer);
+
+// ── SCROLL LOGIC ──
+const narrativeSteps = document.querySelectorAll('.narrative-step');
+const observerSteps = new IntersectionObserver(entries=>{
+  entries.forEach(entry=>{
+    if(entry.isIntersecting){
+      const step = +entry.target.dataset.step;
+      narrativeSteps.forEach((s,i)=>{ s.classList.toggle('active', i===step); });
+      if(step !== currentStep){ currentStep = step; drawScrollyChart(step); }
+    }
+  });
+},{threshold:0.5, rootMargin:'-20% 0px -20% 0px'});
+narrativeSteps.forEach(s=>observerSteps.observe(s));
+
+// ── FADE IN ON SCROLL ──
+const fadeObs = new IntersectionObserver(entries=>{
+  entries.forEach(e=>{ if(e.isIntersecting) e.target.classList.add('visible'); });
+},{threshold:0.1});
+document.querySelectorAll('.fade-in').forEach(el=>fadeObs.observe(el));
+</script>
+</body>
+</html>
