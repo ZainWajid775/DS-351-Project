@@ -2,7 +2,7 @@
 
 > A narrative web visualization exploring fault patterns across 19,535 engine sensor readings.
 
-**Live Demo:** [https://your-username.github.io/pulse-engine-health](https://your-username.github.io/pulse-engine-health)  
+**Live Demo:** [https://your-username.github.io/pulse-engine-health](https://zainwajid775.github.io/pulse-engine-health)  
 **Course:** Information Visualization — Spring 2026  
 **Team:** Zain Wajid (2023775) · Abdullah Yasin (2023049)
 
